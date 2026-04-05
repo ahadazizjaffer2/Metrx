@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description:
     "Transform massive datasets into interactive dashboards. Entirely in your browser.",
   icons: {
-    icon: "/Metrx icon.png",
+    icon: "/favicon.ico",
   },
 };
 
