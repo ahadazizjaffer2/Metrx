@@ -22,6 +22,16 @@ const AIAssistant = dynamic(() => import("./AIAssistant"), {
   loading: () => null,
 });
 
+const SQLEditor = dynamic(() => import("./SQLEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center gap-3 py-16 text-zinc-600 text-sm">
+      <div className="w-4 h-4 border-2 border-violet-500/50 border-t-violet-400 rounded-full animate-spin shrink-0" />
+      Loading SQL editor…
+    </div>
+  ),
+});
+
 const DataPreviewTable = dynamic(() => import("./DataPreviewTable"), {
   ssr: false,
   loading: () => (
@@ -34,7 +44,7 @@ const DataPreviewTable = dynamic(() => import("./DataPreviewTable"), {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab          = "overview" | "charts" | "data" | "ai";
+type Tab          = "overview" | "charts" | "data" | "sql" | "ai";
 type UploadStatus = "idle" | "loading" | "error";
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -62,6 +72,15 @@ function IconTable({ className }: { className?: string }) {
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5" />
+    </svg>
+  );
+}
+
+function IconTerminal({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
     </svg>
   );
 }
@@ -259,6 +278,7 @@ const TABS: TabConfig[] = [
   { id: "overview", label: "Overview", Icon: IconGrid     },
   { id: "charts",   label: "Charts",   Icon: IconBarChart },
   { id: "data",     label: "Data",     Icon: IconTable    },
+  { id: "sql",      label: "SQL",      Icon: IconTerminal },
   { id: "ai",       label: "Ask AI",   Icon: IconSparkle  },
 ];
 
@@ -321,71 +341,79 @@ export default function AppClient() {
       />
       <TabBar active={activeTab} onChange={setActiveTab} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-8">
+      {activeTab === "sql" ? (
+        /* ── SQL tab: full-height, no outer scroll ── */
+        <main className="flex-1 min-h-0 overflow-hidden px-6 py-4">
+          <SQLEditor schema={result.schema} />
+        </main>
+      ) : (
+        /* ── All other tabs: normal scrollable container ── */
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-8">
 
-          {/* ── Overview ── */}
-          {activeTab === "overview" && (
-            <>
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold text-zinc-100">Overview</h2>
-                <p className="text-zinc-500 text-sm mt-1">
-                  Key metrics from{" "}
-                  <span className="text-zinc-300">{result.fileName}</span>
-                </p>
-              </div>
-              <DashboardVisuals
+            {/* ── Overview ── */}
+            {activeTab === "overview" && (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-zinc-100">Overview</h2>
+                  <p className="text-zinc-500 text-sm mt-1">
+                    Key metrics from{" "}
+                    <span className="text-zinc-300">{result.fileName}</span>
+                  </p>
+                </div>
+                <DashboardVisuals
+                  schema={result.schema}
+                  data={result.chartRows}
+                  totalRows={result.totalRows}
+                  view="kpis"
+                />
+              </>
+            )}
+
+            {/* ── Charts ── */}
+            {activeTab === "charts" && (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-zinc-100">Charts</h2>
+                  <p className="text-zinc-500 text-sm mt-1">
+                    Auto-generated from your data&apos;s structure
+                  </p>
+                </div>
+                <DashboardVisuals
+                  schema={result.schema}
+                  data={result.chartRows}
+                  totalRows={result.totalRows}
+                  view="charts"
+                />
+              </>
+            )}
+
+            {/* ── Data ── */}
+            {activeTab === "data" && (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-xl font-semibold text-zinc-100">Data</h2>
+                  <p className="text-zinc-500 text-sm mt-1">
+                    {result.schema.length} columns ·{" "}
+                    {result.totalRows.toLocaleString()} rows
+                  </p>
+                </div>
+                <DataPreviewTable result={result} />
+              </>
+            )}
+
+            {/* ── Ask AI ── */}
+            {activeTab === "ai" && (
+              <AIAssistant
                 schema={result.schema}
-                data={result.chartRows}
                 totalRows={result.totalRows}
-                view="kpis"
+                fileName={result.fileName}
               />
-            </>
-          )}
+            )}
 
-          {/* ── Charts ── */}
-          {activeTab === "charts" && (
-            <>
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold text-zinc-100">Charts</h2>
-                <p className="text-zinc-500 text-sm mt-1">
-                  Auto-generated from your data&apos;s structure
-                </p>
-              </div>
-              <DashboardVisuals
-                schema={result.schema}
-                data={result.chartRows}
-                totalRows={result.totalRows}
-                view="charts"
-              />
-            </>
-          )}
-
-          {/* ── Data ── */}
-          {activeTab === "data" && (
-            <>
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold text-zinc-100">Data</h2>
-                <p className="text-zinc-500 text-sm mt-1">
-                  {result.schema.length} columns ·{" "}
-                  {result.totalRows.toLocaleString()} rows
-                </p>
-              </div>
-              <DataPreviewTable result={result} />
-            </>
-          )}
-
-          {/* ── Ask AI ── */}
-          {activeTab === "ai" && (
-            <AIAssistant
-              schema={result.schema}
-              totalRows={result.totalRows}
-              fileName={result.fileName}
-            />
-          )}
-
-        </div>
-      </main>
+          </div>
+        </main>
+      )}
     </div>
   );
 }
