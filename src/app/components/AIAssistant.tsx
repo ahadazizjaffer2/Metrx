@@ -17,6 +17,7 @@ interface Props {
   schema:    SchemaColumn[];
   totalRows: number;
   fileName:  string;
+  tableName: string;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ function ThinkingBadge({ step }: { step: ThinkingStep }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AIAssistant({ schema, totalRows, fileName }: Props) {
+export default function AIAssistant({ schema, totalRows, fileName, tableName }: Props) {
   const [aiState,  setAIState]  = useState<AIState>(isEngineLoaded() ? "ready" : "idle");
   const [loadProg, setLoadProg] = useState<LoadProgress>({ progress: 0, text: "" });
   const [insights, setInsights] = useState<string>("");
@@ -307,7 +308,7 @@ export default function AIAssistant({ schema, totalRows, fileName }: Props) {
     try {
       // ── Pass 1: generate SQL (hidden from user) ──────────────────────────
       setThinking("sql");
-      const sql = await generateSQL(text, schema, totalRows, fileName);
+      const sql = await generateSQL(text, schema, totalRows, fileName, tableName);
 
       let queryRows: Record<string, unknown>[] | null = null;
 
@@ -323,7 +324,7 @@ export default function AIAssistant({ schema, totalRows, fileName }: Props) {
           // Pass 1b: ask the model to fix its own mistake
           setThinking("fixing");
           try {
-            const repairedSQL = await fixSQL(sql, errMsg, schema, totalRows, fileName);
+            const repairedSQL = await fixSQL(sql, errMsg, schema, totalRows, fileName, tableName);
             if (repairedSQL) {
               setThinking("running");
               queryRows = await getDuckDBClient().query(repairedSQL);

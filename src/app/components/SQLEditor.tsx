@@ -9,9 +9,6 @@ import type { SchemaColumn } from "@/app/lib/duckdb/db-client";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABLE_NAME  = "_metrx_ingested";
-const DEFAULT_SQL = `SELECT * FROM ${TABLE_NAME} LIMIT 100`;
-
 const SQL_KEYWORDS = [
   "SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "LIMIT", "HAVING",
   "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "FULL JOIN", "CROSS JOIN",
@@ -55,18 +52,21 @@ interface QueryState {
 }
 
 interface Props {
-  schema: SchemaColumn[];
+  schema:    SchemaColumn[];
+  tableName: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function SQLEditor({ schema }: Props) {
+export default function SQLEditor({ schema, tableName }: Props) {
+  const defaultSql = `SELECT * FROM "${tableName}" LIMIT 100`;
+
   const [running,     setRunning]     = useState(false);
   const [queryResult, setQueryResult] = useState<QueryState | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Keep mutable refs so keyboard shortcut always sees current values
-  const sqlRef        = useRef(DEFAULT_SQL);
+  const sqlRef        = useRef(defaultSql);
   const runningRef    = useRef(false);
   const disposeRef    = useRef<{ dispose: () => void } | null>(null);
 
@@ -161,9 +161,9 @@ export default function SQLEditor({ schema }: Props) {
         };
 
         const tableSuggestion = {
-          label:          TABLE_NAME,
+          label:          tableName,
           kind:           monaco.languages.CompletionItemKind.Class,
-          insertText:     TABLE_NAME,
+          insertText:     `"${tableName}"`,
           documentation:  "DuckDB ingested table",
           detail:         "table",
           range,
@@ -176,7 +176,7 @@ export default function SQLEditor({ schema }: Props) {
             label:         col,
             kind:          monaco.languages.CompletionItemKind.Field,
             insertText:    col,
-            documentation: meta ? `${TABLE_NAME}.${col} — ${meta.column_type}` : col,
+            documentation: meta ? `"${tableName}".${col} — ${meta.column_type}` : col,
             detail:        meta?.column_type ?? "",
             range,
             sortText:      "1",
@@ -256,7 +256,7 @@ export default function SQLEditor({ schema }: Props) {
                        5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
                 </svg>
                 <span className="text-violet-300 text-[11px] font-medium font-mono truncate">
-                  {TABLE_NAME}
+                  {tableName}
                 </span>
               </div>
             </div>
@@ -291,7 +291,7 @@ export default function SQLEditor({ schema }: Props) {
           style={{ height: 220 }}>
           <Editor
             defaultLanguage="sql"
-            defaultValue={DEFAULT_SQL}
+            defaultValue={defaultSql}
             theme="metrx-dark"
             beforeMount={handleBeforeMount}
             onMount={(editor, monaco) =>

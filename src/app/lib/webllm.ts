@@ -85,6 +85,7 @@ export async function generateSQL(
   schema:    SchemaColumn[],
   totalRows: number,
   fileName:  string,
+  tableName: string,
 ): Promise<string | null> {
   if (!_engine) throw new Error("Engine not loaded");
 
@@ -98,7 +99,7 @@ export async function generateSQL(
         role: "system",
         content:
           `You are a SQL generator for DuckDB.\n` +
-          `Table: _metrx_ingested  Rows: ${totalRows.toLocaleString()}  File: "${fileName}"\n` +
+          `Table: ${tableName}  Rows: ${totalRows.toLocaleString()}  File: "${fileName}"\n` +
           `Columns: ${cols}\n\n` +
           `Rules:\n` +
           `- Output ONLY the raw SQL query — no markdown, no backticks, no explanation\n` +
@@ -135,6 +136,7 @@ export async function fixSQL(
   schema:       SchemaColumn[],
   totalRows:    number,
   fileName:     string,
+  tableName:    string,
 ): Promise<string | null> {
   if (!_engine) throw new Error("Engine not loaded");
 
@@ -148,7 +150,7 @@ export async function fixSQL(
         role: "system",
         content:
           `You are a SQL debugger for DuckDB.\n` +
-          `Table: _metrx_ingested  Rows: ${totalRows.toLocaleString()}  File: "${fileName}"\n` +
+          `Table: ${tableName}  Rows: ${totalRows.toLocaleString()}  File: "${fileName}"\n` +
           `Columns: ${cols}\n\n` +
           `Rules:\n` +
           `- Output ONLY the corrected SQL query — no markdown, no backticks, no explanation\n` +

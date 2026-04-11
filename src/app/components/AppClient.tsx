@@ -344,7 +344,7 @@ export default function AppClient() {
       {activeTab === "sql" ? (
         /* ── SQL tab: full-height, no outer scroll ── */
         <main className="flex-1 min-h-0 overflow-hidden px-6 py-4">
-          <SQLEditor schema={result.schema} />
+          <SQLEditor schema={result.schema} tableName={result.tableName} />
         </main>
       ) : (
         /* ── All other tabs: normal scrollable container ── */

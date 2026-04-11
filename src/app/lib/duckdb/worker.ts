@@ -18,6 +18,7 @@ export type LoadFileResult = {
   schema:     SchemaColumn[];
   totalRows:  number;
   fileName:   string;
+  tableName:  string;
   durationMs: number;
 };
 
@@ -45,6 +46,20 @@ async function getDB(): Promise<duckdb.AsyncDuckDB> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Derives a valid SQL identifier from a file name.
+ *  e.g. "My Sales Data 2024.csv" → "my_sales_data_2024"
+ */
+function sanitizeTableName(fileName: string): string {
+  const name = fileName
+    .replace(/\.[^.]+$/, "")        // strip extension
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")   // non-alphanumeric → underscore
+    .replace(/^_+|_+$/g, "")       // trim leading/trailing underscores
+    .replace(/^(\d)/, "t_$1")      // identifiers can't start with a digit
+    .slice(0, 64);                  // cap length
+  return name || "data";            // fallback if name is empty
+}
 
 function arrowRowToPlain(
   row: Record<string, unknown>,
@@ -98,15 +113,16 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
 
   try {
     const { buffer, fileName } = payload;
-    const t0       = performance.now();
-    const database = await getDB();
+    const tableName = sanitizeTableName(fileName);
+    const t0        = performance.now();
+    const database  = await getDB();
 
     await database.registerFileBuffer(fileName, new Uint8Array(buffer));
 
     const conn = await database.connect();
     try {
       await conn.query(`
-        CREATE OR REPLACE TABLE _metrx_ingested AS
+        CREATE OR REPLACE TABLE "${tableName}" AS
           SELECT * FROM read_csv_auto(
             '${fileName}',
             ignore_errors = true,
@@ -115,10 +131,10 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
       `);
 
       const [previewTable, chartTable, countTable, schemaTable] = await Promise.all([
-        conn.query("SELECT * FROM _metrx_ingested LIMIT 5"),
-        conn.query("SELECT * FROM _metrx_ingested LIMIT 500"),
-        conn.query("SELECT COUNT(*) AS total FROM _metrx_ingested"),
-        conn.query("DESCRIBE _metrx_ingested"),
+        conn.query(`SELECT * FROM "${tableName}" LIMIT 5`),
+        conn.query(`SELECT * FROM "${tableName}" LIMIT 500`),
+        conn.query(`SELECT COUNT(*) AS total FROM "${tableName}"`),
+        conn.query(`DESCRIBE "${tableName}"`),
       ]);
 
       const rows      = tableToArray(previewTable);
@@ -133,7 +149,7 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
       post({
         id,
         type: "SUCCESS",
-        payload: { rows, chartRows, schema, totalRows, fileName, durationMs: Math.round(performance.now() - t0) },
+        payload: { rows, chartRows, schema, totalRows, fileName, tableName, durationMs: Math.round(performance.now() - t0) },
       });
     } finally {
       await conn.close();
