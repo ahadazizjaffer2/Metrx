@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import type { Monaco } from "@monaco-editor/react";
+import type { editor, Position } from "monaco-editor";
 import { getDuckDBClient } from "@/app/lib/duckdb/db-client";
 import type { SchemaColumn } from "@/app/lib/duckdb/db-client";
 
@@ -150,7 +151,7 @@ export default function SQLEditor({ schema }: Props) {
     disposeRef.current?.dispose();
     disposeRef.current = monaco.languages.registerCompletionItemProvider("sql", {
       triggerCharacters: [" ", ".", "\n"],
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: (model: editor.ITextModel, position: Position) => {
         const word  = model.getWordUntilPosition(position);
         const range = {
           startLineNumber: position.lineNumber,
