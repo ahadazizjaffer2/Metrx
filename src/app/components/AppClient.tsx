@@ -408,6 +408,7 @@ export default function AppClient() {
                 schema={result.schema}
                 totalRows={result.totalRows}
                 fileName={result.fileName}
+                tableName={result.tableName}
               />
             )}
 
