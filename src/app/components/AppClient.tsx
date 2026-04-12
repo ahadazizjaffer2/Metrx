@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { getDuckDBClient, type LoadFileResult } from "@/app/lib/duckdb/db-client";
+import { getDuckDBClient, type LoadFileResult, type AdditionalTable } from "@/app/lib/duckdb/db-client";
 
 // ── Dynamic imports ───────────────────────────────────────────────────────────
 
@@ -103,8 +103,10 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
   const inputRef = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setError("Only .csv files are supported.");
+    const name = file.name.toLowerCase();
+    const supported = [".csv", ".parquet", ".json", ".jsonl"];
+    if (!supported.some((ext) => name.endsWith(ext))) {
+      setError("Unsupported file type. Please upload a .csv, .parquet, .json, or .jsonl file.");
       setStatus("error");
       return;
     }
@@ -138,8 +140,8 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
             </span>
           </h1>
           <p className="text-zinc-500 text-base leading-relaxed">
-            Upload a CSV to get instant charts, key metrics, and an AI assistant —
-            all running privately on your device.
+            Upload a CSV, Parquet, or JSON file to get instant charts, key metrics,
+            and an AI assistant — all running privately on your device.
           </p>
         </div>
 
@@ -147,7 +149,7 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
         <div className="w-full max-w-md space-y-4">
           <div
             role="button"
-            aria-label="Upload CSV file"
+            aria-label="Upload data file"
             tabIndex={0}
             onDrop={(e) => {
               e.preventDefault();
@@ -171,7 +173,7 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
             <input
               ref={inputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.parquet,.json,.jsonl"
               className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -197,10 +199,10 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
             </div>
 
             <p className="text-zinc-200 font-medium text-base">
-              {isLoading ? "Analysing your file…" : isDragOver ? "Release to upload" : "Drop a CSV file here"}
+              {isLoading ? "Analysing your file…" : isDragOver ? "Release to upload" : "Drop a file here"}
             </p>
             <p className="text-zinc-500 text-sm mt-1.5">
-              {isLoading ? "This only takes a moment" : "or click to browse · .csv files only"}
+              {isLoading ? "This only takes a moment" : "or click to browse · CSV, Parquet, JSON, JSONL"}
             </p>
           </div>
 
@@ -234,38 +236,130 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
 
 // ── Topbar ────────────────────────────────────────────────────────────────────
 
-function Topbar({ result, onReset }: { result: LoadFileResult; onReset: () => void }) {
-  return (
-    <header className="h-14 shrink-0 flex items-center justify-between px-6
-                       border-b border-zinc-800/60 bg-zinc-950">
-      <Image src="/Metrx icon.png" alt="Metrx" width={30} height={30} className="object-contain my-2" />
+function Topbar({
+  result,
+  additionalTables,
+  onReset,
+  onAddFile,
+  onDropTable,
+}: {
+  result:            LoadFileResult;
+  additionalTables:  AdditionalTable[];
+  onReset:           () => void;
+  onAddFile:         (file: File) => void;
+  onDropTable:       (tableName: string) => void;
+}) {
+  const addInputRef            = useRef<HTMLInputElement>(null);
+  const [isAdding, setIsAdding] = useState(false);
 
-      {/* File badge */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-                      bg-zinc-900 border border-zinc-800 text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-        <span className="text-zinc-300 font-medium truncate max-w-[160px] sm:max-w-[260px]">
-          {result.fileName}
-        </span>
-        <span className="text-zinc-700 hidden sm:inline">·</span>
-        <span className="text-zinc-500 hidden sm:inline">
-          {result.totalRows.toLocaleString()} rows
-        </span>
+  const handleAddFile = useCallback(async (file: File) => {
+    setIsAdding(true);
+    try {
+      await onAddFile(file);
+    } finally {
+      setIsAdding(false);
+      if (addInputRef.current) addInputRef.current.value = "";
+    }
+  }, [onAddFile]);
+
+  return (
+    <header className="h-14 shrink-0 flex items-center gap-3 px-4 sm:px-6
+                       border-b border-zinc-800/60 bg-zinc-950">
+      <Image src="/Metrx icon.png" alt="Metrx" width={30} height={30}
+        className="object-contain my-2 shrink-0" />
+
+      {/* Scrollable badges row */}
+      <div className="flex-1 flex items-center gap-2 min-w-0 overflow-x-auto
+                      [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
+        {/* Primary file badge */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg shrink-0
+                        bg-zinc-900 border border-zinc-800 text-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="text-zinc-300 font-medium truncate max-w-[120px] sm:max-w-[200px]">
+            {result.fileName}
+          </span>
+          <span className="text-zinc-700 hidden sm:inline">·</span>
+          <span className="text-zinc-500 hidden sm:inline">
+            {result.totalRows.toLocaleString()} rows
+          </span>
+        </div>
+
+        {/* Additional table pills */}
+        {additionalTables.map((t) => (
+          <div key={t.tableName}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0
+                       bg-zinc-900/60 border border-zinc-700/60 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+            <span className="text-zinc-400 font-medium font-mono">{t.tableName}</span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-600">{t.rowCount.toLocaleString()} rows</span>
+            <button
+              onClick={() => onDropTable(t.tableName)}
+              title={`Unload ${t.tableName}`}
+              className="ml-0.5 text-zinc-600 hover:text-zinc-300 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
       </div>
 
-      <button
-        onClick={onReset}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
-                   text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60
-                   border border-transparent hover:border-zinc-700 transition-all"
-      >
-        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
-          stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round"
-            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-        </svg>
-        <span className="hidden sm:inline">Load new file</span>
-      </button>
+      {/* Right-side actions */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Hidden file input for adding additional files */}
+        <input
+          ref={addInputRef}
+          type="file"
+          accept=".csv,.parquet,.json,.jsonl"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleAddFile(f);
+          }}
+        />
+
+        {/* Add file button */}
+        <button
+          onClick={() => addInputRef.current?.click()}
+          disabled={isAdding}
+          title="Add another file as a separate table"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
+                     text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60
+                     border border-transparent hover:border-zinc-700
+                     disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          {isAdding ? (
+            <div className="w-3.5 h-3.5 border-2 border-zinc-600 border-t-zinc-400
+                            rounded-full animate-spin shrink-0" />
+          ) : (
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          )}
+          <span className="hidden sm:inline">{isAdding ? "Adding…" : "Add file"}</span>
+        </button>
+
+        {/* Load new file button */}
+        <button
+          onClick={onReset}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
+                     text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60
+                     border border-transparent hover:border-zinc-700 transition-all"
+        >
+          <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          <span className="hidden sm:inline">Load new file</span>
+        </button>
+      </div>
     </header>
   );
 }
@@ -312,11 +406,26 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function AppClient() {
-  const [result,    setResult]    = useState<LoadFileResult | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [result,           setResult]           = useState<LoadFileResult | null>(null);
+  const [activeTab,        setActiveTab]        = useState<Tab>("overview");
+  const [additionalTables, setAdditionalTables] = useState<AdditionalTable[]>([]);
 
   useEffect(() => {
     return () => getDuckDBClient().terminate();
+  }, []);
+
+  const handleAddFile = useCallback(async (file: File) => {
+    const added = await getDuckDBClient().loadAdditionalFile(file);
+    setAdditionalTables((prev) => {
+      // Replace if a table with the same name was already loaded
+      const rest = prev.filter((t) => t.tableName !== added.tableName);
+      return [...rest, added];
+    });
+  }, []);
+
+  const handleDropTable = useCallback(async (tableName: string) => {
+    await getDuckDBClient().dropTable(tableName);
+    setAdditionalTables((prev) => prev.filter((t) => t.tableName !== tableName));
   }, []);
 
   if (!result) {
@@ -324,6 +433,7 @@ export default function AppClient() {
       <UploadScreen
         onSuccess={(r) => {
           setResult(r);
+          setAdditionalTables([]);
           setActiveTab("overview");
         }}
       />
@@ -334,9 +444,13 @@ export default function AppClient() {
     <div className="h-screen flex flex-col bg-zinc-950 overflow-hidden">
       <Topbar
         result={result}
+        additionalTables={additionalTables}
+        onAddFile={handleAddFile}
+        onDropTable={handleDropTable}
         onReset={() => {
           getDuckDBClient().terminate();
           setResult(null);
+          setAdditionalTables([]);
         }}
       />
       <TabBar active={activeTab} onChange={setActiveTab} />
@@ -344,7 +458,11 @@ export default function AppClient() {
       {activeTab === "sql" ? (
         /* ── SQL tab: full-height, no outer scroll ── */
         <main className="flex-1 min-h-0 overflow-hidden px-6 py-4">
-          <SQLEditor schema={result.schema} tableName={result.tableName} />
+          <SQLEditor
+            schema={result.schema}
+            tableName={result.tableName}
+            additionalTables={additionalTables}
+          />
         </main>
       ) : (
         /* ── All other tabs: normal scrollable container ── */
@@ -409,6 +527,7 @@ export default function AppClient() {
                 totalRows={result.totalRows}
                 fileName={result.fileName}
                 tableName={result.tableName}
+                onSwitchToSQL={() => setActiveTab("sql")}
               />
             )}
 

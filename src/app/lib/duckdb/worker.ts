@@ -3,8 +3,10 @@ import * as duckdb from "@duckdb/duckdb-wasm";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type IncomingMessage =
-  | { id: string; type: "LOAD_FILE"; payload: { buffer: ArrayBuffer; fileName: string } }
-  | { id: string; type: "QUERY";     payload: { sql: string } };
+  | { id: string; type: "LOAD_FILE";            payload: { buffer: ArrayBuffer; fileName: string } }
+  | { id: string; type: "LOAD_ADDITIONAL_FILE"; payload: { buffer: ArrayBuffer; fileName: string } }
+  | { id: string; type: "DROP_TABLE";           payload: { tableName: string } }
+  | { id: string; type: "QUERY";                payload: { sql: string } };
 
 export type SchemaColumn = {
   column_name: string;
@@ -22,12 +24,21 @@ export type LoadFileResult = {
   durationMs: number;
 };
 
+export type AdditionalTable = {
+  tableName: string;
+  fileName:  string;
+  rowCount:  number;
+  schema:    SchemaColumn[];
+};
+
 export type QueryResult = { rows: Record<string, unknown>[] };
 
 type OutgoingMessage =
-  | { id: string; type: "SUCCESS";      payload: LoadFileResult }
-  | { id: string; type: "QUERY_RESULT"; payload: QueryResult    }
-  | { id: string; type: "ERROR";        payload: { message: string } };
+  | { id: string; type: "SUCCESS";                 payload: LoadFileResult            }
+  | { id: string; type: "ADDITIONAL_FILE_SUCCESS"; payload: AdditionalTable           }
+  | { id: string; type: "DROP_SUCCESS";            payload: { tableName: string }     }
+  | { id: string; type: "QUERY_RESULT";            payload: QueryResult               }
+  | { id: string; type: "ERROR";                   payload: { message: string }       };
 
 // ─── Singleton DB ─────────────────────────────────────────────────────────────
 
@@ -92,7 +103,7 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
   const { id, type, payload } = event.data;
   const post = (msg: OutgoingMessage) => ctx.postMessage(msg);
 
-  // ── Ad-hoc SQL query (used by the AI chat interface) ──────────────────────
+  // ── Ad-hoc SQL query ──────────────────────────────────────────────────────
   if (type === "QUERY") {
     try {
       const database = await getDB();
@@ -100,6 +111,69 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
       try {
         const table = await conn.query((payload as { sql: string }).sql);
         post({ id, type: "QUERY_RESULT", payload: { rows: tableToArray(table) } });
+      } finally {
+        await conn.close();
+      }
+    } catch (err) {
+      post({ id, type: "ERROR", payload: { message: err instanceof Error ? err.message : String(err) } });
+    }
+    return;
+  }
+
+  // ── Drop a table (used when unloading an additional file) ─────────────────
+  if (type === "DROP_TABLE") {
+    try {
+      const { tableName } = payload as { tableName: string };
+      const database = await getDB();
+      const conn     = await database.connect();
+      try {
+        await conn.query(`DROP TABLE IF EXISTS "${tableName}"`);
+        post({ id, type: "DROP_SUCCESS", payload: { tableName } });
+      } finally {
+        await conn.close();
+      }
+    } catch (err) {
+      post({ id, type: "ERROR", payload: { message: err instanceof Error ? err.message : String(err) } });
+    }
+    return;
+  }
+
+  // ── Load an additional file without dropping existing tables ──────────────
+  if (type === "LOAD_ADDITIONAL_FILE") {
+    try {
+      const { buffer, fileName } = payload as { buffer: ArrayBuffer; fileName: string };
+      const tableName = sanitizeTableName(fileName);
+      const database  = await getDB();
+
+      await database.registerFileBuffer(fileName, new Uint8Array(buffer));
+
+      const ext      = fileName.toLowerCase().split(".").pop() ?? "";
+      const readExpr =
+        ext === "parquet"
+          ? `read_parquet('${fileName}')`
+          : ext === "json" || ext === "jsonl"
+            ? `read_json_auto('${fileName}')`
+            : `read_csv_auto('${fileName}', ignore_errors = true, all_varchar = false)`;
+
+      const conn = await database.connect();
+      try {
+        await conn.query(
+          `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM ${readExpr}`
+        );
+
+        const [countTable, schemaTable] = await Promise.all([
+          conn.query(`SELECT COUNT(*) AS total FROM "${tableName}"`),
+          conn.query(`DESCRIBE "${tableName}"`),
+        ]);
+
+        const rowCount = Number(tableToArray(countTable)[0].total);
+        const schema   = tableToArray(schemaTable).map((r) => ({
+          column_name: String(r.column_name ?? ""),
+          column_type: String(r.column_type ?? ""),
+          nullable:    String(r["null"] ?? r.nullable ?? "YES"),
+        }));
+
+        post({ id, type: "ADDITIONAL_FILE_SUCCESS", payload: { tableName, fileName, rowCount, schema } });
       } finally {
         await conn.close();
       }
@@ -119,16 +193,19 @@ ctx.onmessage = async (event: MessageEvent<IncomingMessage>) => {
 
     await database.registerFileBuffer(fileName, new Uint8Array(buffer));
 
+    const ext  = fileName.toLowerCase().split(".").pop() ?? "";
+    const readExpr =
+      ext === "parquet"
+        ? `read_parquet('${fileName}')`
+        : ext === "json" || ext === "jsonl"
+          ? `read_json_auto('${fileName}')`
+          : `read_csv_auto('${fileName}', ignore_errors = true, all_varchar = false)`;
+
     const conn = await database.connect();
     try {
-      await conn.query(`
-        CREATE OR REPLACE TABLE "${tableName}" AS
-          SELECT * FROM read_csv_auto(
-            '${fileName}',
-            ignore_errors = true,
-            all_varchar   = false
-          )
-      `);
+      await conn.query(
+        `CREATE OR REPLACE TABLE "${tableName}" AS SELECT * FROM ${readExpr}`
+      );
 
       const [previewTable, chartTable, countTable, schemaTable] = await Promise.all([
         conn.query(`SELECT * FROM "${tableName}" LIMIT 5`),

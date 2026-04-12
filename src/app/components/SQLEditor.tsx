@@ -5,7 +5,7 @@ import Editor from "@monaco-editor/react";
 import type { Monaco } from "@monaco-editor/react";
 import type { editor, Position } from "monaco-editor";
 import { getDuckDBClient } from "@/app/lib/duckdb/db-client";
-import type { SchemaColumn } from "@/app/lib/duckdb/db-client";
+import type { SchemaColumn, AdditionalTable } from "@/app/lib/duckdb/db-client";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,13 +52,71 @@ interface QueryState {
 }
 
 interface Props {
-  schema:    SchemaColumn[];
-  tableName: string;
+  schema:           SchemaColumn[];
+  tableName:        string;
+  additionalTables: AdditionalTable[];
+}
+
+// ── Sidebar table section ─────────────────────────────────────────────────────
+
+function SidebarTable({
+  tableName,
+  schema,
+  accentClass,
+}: {
+  tableName:   string;
+  schema:      SchemaColumn[];
+  accentClass: string;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="mb-1 px-2">
+      {/* Table header */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg
+                   hover:bg-zinc-800/40 transition-colors mb-0.5"
+      >
+        <svg
+          className={`w-2.5 h-2.5 shrink-0 text-zinc-600 transition-transform ${open ? "rotate-90" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+        </svg>
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md border
+                         text-[10px] font-medium font-mono truncate ${accentClass}`}>
+          {tableName}
+        </div>
+      </button>
+
+      {/* Column list */}
+      {open && (
+        <div className="space-y-px pl-4">
+          {schema.map((col) => (
+            <div
+              key={col.column_name}
+              className="flex items-center justify-between gap-2
+                         px-2 py-1 rounded-lg hover:bg-zinc-800/50 cursor-default"
+            >
+              <span className="text-zinc-300 text-[11px] font-mono truncate">
+                {col.column_name}
+              </span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full border shrink-0
+                               ${typeColor(col.column_type)}`}>
+                {col.column_type.split("(")[0]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function SQLEditor({ schema, tableName }: Props) {
+export default function SQLEditor({ schema, tableName, additionalTables }: Props) {
   const defaultSql = `SELECT * FROM "${tableName}" LIMIT 100`;
 
   const [running,     setRunning]     = useState(false);
@@ -66,9 +124,10 @@ export default function SQLEditor({ schema, tableName }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Keep mutable refs so keyboard shortcut always sees current values
-  const sqlRef        = useRef(defaultSql);
-  const runningRef    = useRef(false);
-  const disposeRef    = useRef<{ dispose: () => void } | null>(null);
+  const sqlRef     = useRef(defaultSql);
+  const runningRef = useRef(false);
+  const disposeRef = useRef<{ dispose: () => void } | null>(null);
+  const monacoRef  = useRef<Monaco | null>(null);
 
   // ── Run query ───────────────────────────────────────────────────────────────
 
@@ -103,8 +162,86 @@ export default function SQLEditor({ schema, tableName }: Props) {
 
   // ── Monaco setup ────────────────────────────────────────────────────────────
 
+  // Registers (or re-registers) the completion provider — called on mount and
+  // whenever schema / tableName / additionalTables changes.
+  const registerCompletions = useCallback((monaco: Monaco) => {
+    disposeRef.current?.dispose();
+    disposeRef.current = monaco.languages.registerCompletionItemProvider("sql", {
+      triggerCharacters: [" ", ".", "\n"],
+      provideCompletionItems: (model: editor.ITextModel, position: Position) => {
+        const word  = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber:   position.lineNumber,
+          startColumn:     word.startColumn,
+          endColumn:       word.endColumn,
+        };
+
+        // Primary table + its columns
+        const primarySuggestions = [
+          {
+            label:         tableName,
+            kind:          monaco.languages.CompletionItemKind.Class,
+            insertText:    `"${tableName}"`,
+            documentation: "Primary table",
+            detail:        "table",
+            range,
+            sortText:      "0a",
+          },
+          ...schema.map((col) => ({
+            label:         col.column_name,
+            kind:          monaco.languages.CompletionItemKind.Field,
+            insertText:    col.column_name,
+            documentation: `"${tableName}".${col.column_name} — ${col.column_type}`,
+            detail:        col.column_type,
+            range,
+            sortText:      "1a",
+          })),
+        ];
+
+        // Additional tables + their columns
+        const additionalSuggestions = additionalTables.flatMap((t) => [
+          {
+            label:         t.tableName,
+            kind:          monaco.languages.CompletionItemKind.Class,
+            insertText:    `"${t.tableName}"`,
+            documentation: `${t.fileName} · ${t.rowCount.toLocaleString()} rows`,
+            detail:        "table",
+            range,
+            sortText:      "0b",
+          },
+          ...t.schema.map((col) => ({
+            label:         col.column_name,
+            kind:          monaco.languages.CompletionItemKind.Field,
+            insertText:    col.column_name,
+            documentation: `"${t.tableName}".${col.column_name} — ${col.column_type}`,
+            detail:        `${t.tableName}.${col.column_type}`,
+            range,
+            sortText:      "1b",
+          })),
+        ]);
+
+        const keywordSuggestions = SQL_KEYWORDS.map((kw) => ({
+          label:      kw,
+          kind:       monaco.languages.CompletionItemKind.Keyword,
+          insertText: kw,
+          range,
+          sortText:   "2",
+        }));
+
+        return { suggestions: [...primarySuggestions, ...additionalSuggestions, ...keywordSuggestions] };
+      },
+    });
+  }, [schema, tableName, additionalTables]);
+
+  // Re-register whenever deps change (after initial mount)
+  useEffect(() => {
+    if (monacoRef.current) registerCompletions(monacoRef.current);
+  }, [registerCompletions]);
+
   const handleBeforeMount = useCallback((monaco: Monaco) => {
-    // Custom theme matching zinc-950 palette
+    monacoRef.current = monaco;
+
     monaco.editor.defineTheme("metrx-dark", {
       base: "vs-dark",
       inherit: true,
@@ -145,56 +282,8 @@ export default function SQLEditor({ schema, tableName }: Props) {
       },
     });
 
-    // Column + keyword autocomplete
-    const columnNames = schema.map((s) => s.column_name);
-
-    disposeRef.current?.dispose();
-    disposeRef.current = monaco.languages.registerCompletionItemProvider("sql", {
-      triggerCharacters: [" ", ".", "\n"],
-      provideCompletionItems: (model: editor.ITextModel, position: Position) => {
-        const word  = model.getWordUntilPosition(position);
-        const range = {
-          startLineNumber: position.lineNumber,
-          endLineNumber:   position.lineNumber,
-          startColumn:     word.startColumn,
-          endColumn:       word.endColumn,
-        };
-
-        const tableSuggestion = {
-          label:          tableName,
-          kind:           monaco.languages.CompletionItemKind.Class,
-          insertText:     `"${tableName}"`,
-          documentation:  "DuckDB ingested table",
-          detail:         "table",
-          range,
-          sortText:       "0",
-        };
-
-        const columnSuggestions = columnNames.map((col) => {
-          const meta = schema.find((s) => s.column_name === col);
-          return {
-            label:         col,
-            kind:          monaco.languages.CompletionItemKind.Field,
-            insertText:    col,
-            documentation: meta ? `"${tableName}".${col} — ${meta.column_type}` : col,
-            detail:        meta?.column_type ?? "",
-            range,
-            sortText:      "1",
-          };
-        });
-
-        const keywordSuggestions = SQL_KEYWORDS.map((kw) => ({
-          label:      kw,
-          kind:       monaco.languages.CompletionItemKind.Keyword,
-          insertText: kw,
-          range,
-          sortText:   "2",
-        }));
-
-        return { suggestions: [tableSuggestion, ...columnSuggestions, ...keywordSuggestions] };
-      },
-    });
-  }, [schema]);
+    registerCompletions(monaco);
+  }, [registerCompletions]);
 
   type IStandaloneEditor = { addCommand: (key: number, fn: () => void) => void };
 
@@ -242,43 +331,23 @@ export default function SQLEditor({ schema, tableName }: Props) {
 
         {sidebarOpen && (
           <div className="flex-1 overflow-y-auto py-2 min-h-0">
-            {/* Table name badge */}
-            <div className="px-2 mb-2">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg
-                              bg-violet-500/10 border border-violet-500/20">
-                <svg className="w-3 h-3 text-violet-400 shrink-0" fill="none"
-                  viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round"
-                    d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75
-                       6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75
-                       6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25
-                       4.125s-8.25-1.847-8.25-4.125V6.375m16.5
-                       5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                </svg>
-                <span className="text-violet-300 text-[11px] font-medium font-mono truncate">
-                  {tableName}
-                </span>
-              </div>
-            </div>
 
-            {/* Column list */}
-            <div className="space-y-px px-2">
-              {schema.map((col) => (
-                <div
-                  key={col.column_name}
-                  className="flex items-center justify-between gap-2
-                             px-2 py-1.5 rounded-lg hover:bg-zinc-800/50 cursor-default"
-                >
-                  <span className="text-zinc-300 text-[11px] font-mono truncate">
-                    {col.column_name}
-                  </span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full border shrink-0
-                                   ${typeColor(col.column_type)}`}>
-                    {col.column_type.split("(")[0]}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {/* ── Primary table ── */}
+            <SidebarTable
+              tableName={tableName}
+              schema={schema}
+              accentClass="bg-violet-500/10 border-violet-500/20 text-violet-300"
+            />
+
+            {/* ── Additional tables ── */}
+            {additionalTables.map((t) => (
+              <SidebarTable
+                key={t.tableName}
+                tableName={t.tableName}
+                schema={t.schema}
+                accentClass="bg-sky-500/10 border-sky-500/20 text-sky-300"
+              />
+            ))}
           </div>
         )}
       </aside>

@@ -14,10 +14,11 @@ import { isNumericType, isDatetimeType, isStringType } from "@/app/lib/chartUtil
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface Props {
-  schema:    SchemaColumn[];
-  totalRows: number;
-  fileName:  string;
-  tableName: string;
+  schema:          SchemaColumn[];
+  totalRows:       number;
+  fileName:        string;
+  tableName:       string;
+  onSwitchToSQL?: () => void;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -205,7 +206,7 @@ function ThinkingBadge({ step }: { step: ThinkingStep }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AIAssistant({ schema, totalRows, fileName, tableName }: Props) {
+export default function AIAssistant({ schema, totalRows, fileName, tableName, onSwitchToSQL }: Props) {
   const [aiState,  setAIState]  = useState<AIState>(isEngineLoaded() ? "ready" : "idle");
   const [loadProg, setLoadProg] = useState<LoadProgress>({ progress: 0, text: "" });
   const [insights, setInsights] = useState<string>("");
@@ -380,19 +381,6 @@ export default function AIAssistant({ schema, totalRows, fileName, tableName }: 
     }
   };
 
-  // ── WebGPU guard ──────────────────────────────────────────────────────────
-
-  if (!isWebGPUSupported()) {
-    return (
-      <div className="rounded-2xl border border-dashed border-zinc-800 p-8 text-center">
-        <p className="text-zinc-500 text-sm">AI assistant not available in this browser.</p>
-        <p className="text-zinc-700 text-xs mt-1">
-          Try Chrome 113+ or Edge 113+ for full AI support.
-        </p>
-      </div>
-    );
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -413,18 +401,99 @@ export default function AIAssistant({ schema, totalRows, fileName, tableName }: 
                 no account, no internet connection required, and your data never
                 leaves your device. Just ask a question in plain English.
               </p>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={handleEnable}
-                  className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500
-                             text-white text-xs font-medium transition-colors"
-                >
-                  Enable AI →
-                </button>
-                <span className="text-[11px] text-zinc-600">
-                  One-time setup · {MODEL_SIZE} · ready instantly after
-                </span>
+
+              {/* ── Three disclosure callouts ── */}
+              <div className="flex flex-col gap-2 mb-5">
+                {[
+                  {
+                    icon: (
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" strokeWidth={1.75}>
+                        <path strokeLinecap="round" strokeLinejoin="round"
+                          d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021
+                             18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                    ),
+                    text: `${MODEL_SIZE} one-time download`,
+                    color: "text-amber-400",
+                  },
+                  {
+                    icon: (
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" strokeWidth={1.75}>
+                        <path strokeLinecap="round" strokeLinejoin="round"
+                          d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3
+                             0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25
+                             2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25
+                             3h13.5A2.25 2.25 0 0121 5.25z" />
+                      </svg>
+                    ),
+                    text: "Requires Chrome or Edge 113+",
+                    color: "text-sky-400",
+                  },
+                  {
+                    icon: (
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor" strokeWidth={1.75}>
+                        <path strokeLinecap="round" strokeLinejoin="round"
+                          d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75
+                             11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25
+                             2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25
+                             2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    ),
+                    text: "Model runs entirely on your device after download",
+                    color: "text-emerald-400",
+                  },
+                ].map(({ icon, text, color }) => (
+                  <div key={text} className={`flex items-center gap-2 text-[11px] ${color}`}>
+                    {icon}
+                    <span>{text}</span>
+                  </div>
+                ))}
               </div>
+
+              {/* ── Action row ── */}
+              {!isWebGPUSupported() ? (
+                <div className="rounded-xl border border-dashed border-zinc-700 px-4 py-3
+                                bg-zinc-900/50 text-xs text-zinc-500 leading-relaxed">
+                  <span className="text-zinc-400 font-medium">WebGPU not detected.</span>{" "}
+                  The on-device AI requires WebGPU, available in Chrome 113+ and Edge 113+.
+                  Open metrx in one of those browsers to enable it.
+                  {onSwitchToSQL && (
+                    <>
+                      {" "}You can still explore your data with the{" "}
+                      <button
+                        onClick={onSwitchToSQL}
+                        className="text-violet-400 hover:text-violet-300 underline
+                                   underline-offset-2 transition-colors"
+                      >
+                        SQL editor
+                      </button>.
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleEnable}
+                    className="px-4 py-2 rounded-lg border border-violet-500/50
+                               text-violet-400 hover:bg-violet-500/10 hover:border-violet-400
+                               text-xs font-medium transition-colors"
+                  >
+                    Enable AI →
+                  </button>
+                  {onSwitchToSQL && (
+                    <button
+                      onClick={onSwitchToSQL}
+                      className="text-[11px] text-zinc-600 hover:text-zinc-400
+                                 underline underline-offset-2 transition-colors"
+                    >
+                      Skip — use SQL editor instead
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,8 +1,8 @@
 "use client";
 
-export type { SchemaColumn, LoadFileResult, QueryResult } from "./worker";
+export type { SchemaColumn, LoadFileResult, QueryResult, AdditionalTable } from "./worker";
 
-import type { LoadFileResult, QueryResult } from "./worker";
+import type { LoadFileResult, QueryResult, AdditionalTable } from "./worker";
 
 // Generic pending slot — resolve payload is typed at the call site
 type PendingRequest = {
@@ -11,9 +11,11 @@ type PendingRequest = {
 };
 
 type WorkerResponse =
-  | { id: string; type: "SUCCESS";      payload: LoadFileResult }
-  | { id: string; type: "QUERY_RESULT"; payload: QueryResult    }
-  | { id: string; type: "ERROR";        payload: { message: string } };
+  | { id: string; type: "SUCCESS";                 payload: LoadFileResult        }
+  | { id: string; type: "ADDITIONAL_FILE_SUCCESS"; payload: AdditionalTable       }
+  | { id: string; type: "DROP_SUCCESS";            payload: { tableName: string } }
+  | { id: string; type: "QUERY_RESULT";            payload: QueryResult           }
+  | { id: string; type: "ERROR";                   payload: { message: string }   };
 
 class DuckDBClient {
   private worker:  Worker | null = null;
@@ -67,6 +69,36 @@ class DuckDBClient {
         { id, type: "LOAD_FILE", payload: { buffer, fileName: file.name } },
         [buffer]
       );
+    });
+  }
+
+  /** Load a second (or Nth) file as a new table without dropping existing tables. */
+  async loadAdditionalFile(file: File): Promise<AdditionalTable> {
+    const id     = `req_${++this.counter}_${Date.now()}`;
+    const buffer = await file.arrayBuffer();
+
+    return new Promise<AdditionalTable>((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: (v) => resolve(v as AdditionalTable),
+        reject,
+      });
+      this.getWorker().postMessage(
+        { id, type: "LOAD_ADDITIONAL_FILE", payload: { buffer, fileName: file.name } },
+        [buffer],
+      );
+    });
+  }
+
+  /** Drop a previously loaded additional table by name. */
+  async dropTable(tableName: string): Promise<void> {
+    const id = `req_${++this.counter}_${Date.now()}`;
+
+    return new Promise<void>((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: () => resolve(),
+        reject,
+      });
+      this.getWorker().postMessage({ id, type: "DROP_TABLE", payload: { tableName } });
     });
   }
 
