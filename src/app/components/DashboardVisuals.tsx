@@ -117,14 +117,15 @@ function preparePieData(
 function KpiCard({ rec }: { rec: KpiRecommendation }) {
   const s = ACCENT_MAP[rec.accent];
   return (
-    <div className={`rounded-2xl border p-5 flex flex-col gap-1.5 ${s.bg} ${s.border}`}>
+    <div className={`rounded-2xl border p-5 flex flex-col gap-1.5 ${s.bg} ${s.border}
+                     hover:scale-[1.01] transition-transform duration-150`}>
       <div className="flex items-center gap-2">
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
         <span className="text-[10px] text-zinc-500 uppercase tracking-widest truncate">
           {rec.label}
         </span>
       </div>
-      <p className={`text-2xl font-bold tracking-tight ${s.text}`}>{rec.value}</p>
+      <p className={`text-3xl font-bold tracking-tight ${s.text}`}>{rec.value}</p>
       {rec.subLabel && <p className="text-[11px] text-zinc-600">{rec.subLabel}</p>}
     </div>
   );
@@ -132,8 +133,9 @@ function KpiCard({ rec }: { rec: KpiRecommendation }) {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-      <p className="text-sm font-medium text-zinc-300 mb-5 truncate">{title}</p>
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5
+                    hover:border-zinc-700 transition-colors duration-150">
+      <p className="text-sm font-medium text-zinc-200 mb-5 truncate">{title}</p>
       {children}
     </div>
   );
@@ -210,7 +212,8 @@ export default function DashboardVisuals({ schema, data, totalRows, view }: Prop
             {kpis.map((kpi, i) => <KpiCard key={i} rec={kpi} />)}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-zinc-800 p-10 text-center">
+          <div className="rounded-2xl border border-dashed border-zinc-800 min-h-[200px]
+                          flex items-center justify-center flex-col gap-2">
             <p className="text-zinc-500 text-sm">No metrics found for this dataset.</p>
           </div>
         )
@@ -338,11 +341,12 @@ export default function DashboardVisuals({ schema, data, totalRows, view }: Prop
 
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-zinc-800 p-10 text-center">
+            <div className="rounded-2xl border border-dashed border-zinc-800 min-h-[200px]
+                            flex items-center justify-center flex-col gap-2">
               <p className="text-zinc-500 text-sm">
                 No charts could be generated for this dataset.
               </p>
-              <p className="text-zinc-700 text-xs mt-1.5">
+              <p className="text-zinc-700 text-xs">
                 Try a CSV with numeric columns and at least one date or categorical column.
               </p>
             </div>

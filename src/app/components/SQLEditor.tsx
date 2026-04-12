@@ -461,7 +461,7 @@ export default function SQLEditor({ schema, tableName, additionalTables }: Props
             ) : (
               <table className="w-full text-xs">
                 <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-zinc-800 bg-zinc-900/90 backdrop-blur-sm">
+                  <tr className="border-b border-zinc-800 bg-zinc-900">
                     <th className="px-4 py-2.5 text-left text-zinc-600 font-normal w-10">#</th>
                     {queryResult.columns.map((col) => (
                       <th key={col}
@@ -474,7 +474,7 @@ export default function SQLEditor({ schema, tableName, additionalTables }: Props
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
                   {queryResult.rows.map((row, i) => (
-                    <tr key={i} className="bg-zinc-950 hover:bg-zinc-900/40 transition-colors">
+                    <tr key={i} className="bg-zinc-950 hover:bg-zinc-800/30 transition-colors">
                       <td className="px-4 py-2.5 text-zinc-700 font-mono">{i + 1}</td>
                       {queryResult.columns.map((col) => (
                         <td key={col}

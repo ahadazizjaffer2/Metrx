@@ -134,10 +134,11 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-20">
         {/* Hero text */}
         <div className="w-full max-w-lg text-center mb-10">
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            <span className="bg-gradient-to-br from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent">
-              Your data,<br />your insights.
-            </span>
+          <p className="text-xs font-medium uppercase tracking-widest text-violet-400 mb-3">
+            Private data intelligence
+          </p>
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-4">
+            Your data,<br />your insights.
           </h1>
           <p className="text-zinc-500 text-base leading-relaxed">
             Upload a CSV, Parquet, or JSON file to get instant charts, key metrics,
@@ -162,10 +163,10 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
             onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
             onClick={() => !isLoading && inputRef.current?.click()}
             className={[
-              "rounded-2xl border-2 border-dashed p-14 text-center",
+              "rounded-2xl border-2 border-dashed p-20 text-center",
               "transition-all duration-200 cursor-pointer select-none",
               isDragOver
-                ? "border-violet-500 bg-violet-500/10 scale-[1.01]"
+                ? "border-violet-500 bg-violet-500/10 scale-[1.01] drag-over-ring"
                 : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-600 hover:bg-zinc-900/60",
               isLoading ? "pointer-events-none opacity-60" : "",
             ].join(" ")}
@@ -207,11 +208,20 @@ function UploadScreen({ onSuccess }: { onSuccess: (r: LoadFileResult) => void })
           </div>
 
           {/* Privacy badge */}
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-3">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full
                             bg-zinc-900/50 border border-zinc-800 text-xs text-zinc-500">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
               Processed entirely on your device · zero server upload
+            </div>
+            <div className="flex items-center gap-2">
+              {["CSV", "Parquet", "JSON"].map((fmt) => (
+                <span key={fmt}
+                  className="px-2.5 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/60
+                             text-[11px] text-zinc-500 font-mono">
+                  {fmt}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -263,7 +273,7 @@ function Topbar({
   }, [onAddFile]);
 
   return (
-    <header className="h-14 shrink-0 flex items-center gap-3 px-4 sm:px-6
+    <header className="h-16 shrink-0 flex items-center gap-3 px-4 sm:px-6
                        border-b border-zinc-800/60 bg-zinc-950">
       <Image src="/Metrx icon.png" alt="Metrx" width={30} height={30}
         className="object-contain my-2 shrink-0" />
@@ -273,16 +283,18 @@ function Topbar({
                       [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* Primary file badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg shrink-0
+        <div className="flex items-stretch gap-0 rounded-lg shrink-0 overflow-hidden
                         bg-zinc-900 border border-zinc-800 text-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span className="text-zinc-300 font-medium truncate max-w-[120px] sm:max-w-[200px]">
-            {result.fileName}
-          </span>
-          <span className="text-zinc-700 hidden sm:inline">·</span>
-          <span className="text-zinc-500 hidden sm:inline">
-            {result.totalRows.toLocaleString()} rows
-          </span>
+          <span className="w-1 bg-emerald-500 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <span className="text-zinc-300 font-medium truncate max-w-[120px] sm:max-w-[200px]">
+              {result.fileName}
+            </span>
+            <span className="text-zinc-700 hidden sm:inline">·</span>
+            <span className="text-zinc-500 hidden sm:inline">
+              {result.totalRows.toLocaleString()} rows
+            </span>
+          </div>
         </div>
 
         {/* Additional table pills */}
@@ -329,7 +341,7 @@ function Topbar({
           title="Add another file as a separate table"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
                      text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60
-                     border border-transparent hover:border-zinc-700
+                     border border-zinc-800 hover:border-zinc-700
                      disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
           {isAdding ? (
@@ -350,7 +362,7 @@ function Topbar({
           onClick={onReset}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
                      text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60
-                     border border-transparent hover:border-zinc-700 transition-all"
+                     border border-zinc-800 hover:border-zinc-700 transition-all"
         >
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
             stroke="currentColor" strokeWidth={2}>
@@ -378,7 +390,7 @@ const TABS: TabConfig[] = [
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   return (
-    <nav className="shrink-0 flex border-b border-zinc-800/60 bg-zinc-950 px-2">
+    <nav className="shrink-0 flex border-b border-zinc-800/60 bg-zinc-950 px-3 py-2 gap-1">
       {TABS.map(({ id, label, Icon }) => {
         const isActive = active === id;
         return (
@@ -386,16 +398,15 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
             key={id}
             onClick={() => onChange(id)}
             className={[
-              "relative flex items-center gap-2 px-4 py-3 text-sm transition-colors",
+              "flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors",
               "focus:outline-none",
-              isActive ? "text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
+              isActive
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50",
             ].join(" ")}
           >
             <Icon className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">{label}</span>
-            {isActive && (
-              <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-violet-500 rounded-full" />
-            )}
           </button>
         );
       })}
@@ -471,53 +482,27 @@ export default function AppClient() {
 
             {/* ── Overview ── */}
             {activeTab === "overview" && (
-              <>
-                <div className="mb-8">
-                  <h2 className="text-xl font-semibold text-zinc-100">Overview</h2>
-                  <p className="text-zinc-500 text-sm mt-1">
-                    Key metrics from{" "}
-                    <span className="text-zinc-300">{result.fileName}</span>
-                  </p>
-                </div>
-                <DashboardVisuals
-                  schema={result.schema}
-                  data={result.chartRows}
-                  totalRows={result.totalRows}
-                  view="kpis"
-                />
-              </>
+              <DashboardVisuals
+                schema={result.schema}
+                data={result.chartRows}
+                totalRows={result.totalRows}
+                view="kpis"
+              />
             )}
 
             {/* ── Charts ── */}
             {activeTab === "charts" && (
-              <>
-                <div className="mb-8">
-                  <h2 className="text-xl font-semibold text-zinc-100">Charts</h2>
-                  <p className="text-zinc-500 text-sm mt-1">
-                    Auto-generated from your data&apos;s structure
-                  </p>
-                </div>
-                <DashboardVisuals
-                  schema={result.schema}
-                  data={result.chartRows}
-                  totalRows={result.totalRows}
-                  view="charts"
-                />
-              </>
+              <DashboardVisuals
+                schema={result.schema}
+                data={result.chartRows}
+                totalRows={result.totalRows}
+                view="charts"
+              />
             )}
 
             {/* ── Data ── */}
             {activeTab === "data" && (
-              <>
-                <div className="mb-8">
-                  <h2 className="text-xl font-semibold text-zinc-100">Data</h2>
-                  <p className="text-zinc-500 text-sm mt-1">
-                    {result.schema.length} columns ·{" "}
-                    {result.totalRows.toLocaleString()} rows
-                  </p>
-                </div>
-                <DataPreviewTable result={result} />
-              </>
+              <DataPreviewTable result={result} />
             )}
 
             {/* ── Ask AI ── */}

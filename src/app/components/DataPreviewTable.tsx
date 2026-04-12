@@ -32,14 +32,14 @@ export default function DataPreviewTable({ result }: Props) {
     <div className="space-y-5">
 
       {/* Stat bar */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-4">
         {[
           { label: "Rows",      value: totalRows.toLocaleString() },
           { label: "Columns",   value: String(schema.length) },
           { label: "Load time", value: `${durationMs} ms` },
         ].map(({ label, value }) => (
           <div key={label}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg
+            className="flex items-center gap-2 px-3 py-2 rounded-lg
                        bg-zinc-900 border border-zinc-800 text-xs">
             <span className="text-zinc-500">{label}</span>
             <span className="text-zinc-200 font-medium font-mono">{value}</span>
@@ -49,9 +49,6 @@ export default function DataPreviewTable({ result }: Props) {
 
       {/* Schema pills */}
       <div>
-        <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
-          Columns
-        </p>
         <div className="flex flex-wrap gap-2">
           {schema.map((col) => (
             <div key={col.column_name}
